@@ -1,0 +1,6 @@
+__pycache__
+venv/
+.airbase
+.env*
+.gitlab-ci.yml
+test_notion.py
