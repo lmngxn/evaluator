@@ -37,6 +37,7 @@ with cols[0]:
         disabled=st.session_state.state["chat_has_started"],
     )
 
+visible_labels_ordered = selected_model_labels
 if st.session_state.state["chat_has_started"]:
     with cols[1]:
         st.markdown("#### Display models")
@@ -62,7 +63,7 @@ if st.session_state.state["chat_has_started"]:
         st.session_state.messages_compare = []
         st.session_state.selected_model_labels = []
         st.session_state.agents["compare"] = []
-        st.session_state.agents["evaluator_agent"] = None
+        st.session_state.agents["evaluator"] = None
         st.session_state.state["chat_has_started"] = False
         st.rerun()
 
@@ -97,9 +98,11 @@ if not selected_model_labels:
 
 for msg in st.session_state.messages_compare:
     with st.chat_message(msg["role"]):
-        if msg["role"] == "assistant" and isinstance(msg["content"], dict):      
-            cols = st.columns(len(visible_labels_ordered), border=True)      
-            for label, col in zip(msg["content"].keys(), cols):
+        if msg["role"] == "assistant" and isinstance(msg["content"], dict):
+            cols = st.columns(len(visible_labels_ordered), border=True)
+            for label, col in zip(visible_labels_ordered, cols):
+                if label not in msg["content"]:
+                    continue
                 with col:
                     logger.info(msg["content"])
                     st.markdown(f"#### {label}")
@@ -110,7 +113,29 @@ for msg in st.session_state.messages_compare:
         else:
             st.markdown(msg["content"])
 
-if st.session_state.state["waiting_for_user_compare"]:
+if st.session_state.state["evaluating"]:
+    with st.spinner("Evaluating responses..."):
+        evaluator = st.session_state.agents["evaluator"]
+        last_content = st.session_state.messages_compare[-1]["content"]
+        results_to_eval = [
+            last_content[label]["result"]
+            for label in st.session_state.selected_model_labels
+            if label in last_content and "result" in last_content[label]
+        ]
+        try:
+            evaluation_result = asyncio.run(evaluator.response(
+                st.session_state.state["pending_prompt_for_eval"], results_to_eval
+            ))
+            for label, eva_result in zip(st.session_state.selected_model_labels, evaluation_result):
+                if eva_result and label in last_content:
+                    last_content[label]["evaluation"] = "\n\n" + evaluator.format_response(eva_result)
+        except Exception as e:
+            logger.error(f"Evaluation failed: {e}")
+
+        st.session_state.state["evaluating"] = False
+        st.rerun()
+
+elif st.session_state.state["waiting_for_user_compare"]:
     user_input = st.chat_input("Type your message...")
 
     if user_input:
@@ -121,46 +146,50 @@ if st.session_state.state["waiting_for_user_compare"]:
             "waiting_for_user_compare": False,
             "chat_has_started": True,
         })
-        
+
         st.rerun()
+
 else:
     with st.chat_message("assistant"):
-        with st.spinner(f"AI is thinking..."):
+        with st.spinner("AI is thinking..."):
             if not st.session_state.agents["compare"]:
                 st.session_state.selected_model_labels = selected_model_labels
-                st.session_state.agents = []
-                for model in st.session_state.models: 
+                st.session_state.agents["compare"] = []
+                for model in st.session_state.models:
                     if model["label"] in st.session_state.selected_model_labels:
                         if model["provider"] == "openai":
                             st.session_state.agents["compare"].append(openAIAgent(api_key=config['openai_api_key'], model=model["model"]))
-                        if model["provider"] == "anthropic":
+                        elif model["provider"] == "anthropic":
                             st.session_state.agents["compare"].append(claudeAgent(api_key=config['anthropic_api_key'], model=model["model"]))
-                        if model["provider"] == "gemini":
+                        elif model["provider"] == "gemini":
                             st.session_state.agents["compare"].append(geminiAgent(api_key=config['gemini_api_key'], model=model["model"]))
 
             results = asyncio.run(run_agents(st.session_state.state["pending_input_compare"], st.session_state.agents["compare"]))
-    # results = ["1", "2", "3"] # for testing only, to bypass the API calls and speed up the UI development. Please uncomment the above line and remove this line for real API calls.
-        
-            if st.session_state.state["evaluate"]:
-                if not st.session_state.agents["evaluator"]:
-                    st.session_state.agents["evaluator"] = evaluatorAgent(api_key=config['openai_api_key'], provider="openai",model="gpt-4o-nano")
-                evaluation_result = asyncio.run(st.session_state.agents["evaluator"].response(st.session_state.state["pending_input_compare"], results))
-        
+
             assistant_outputs = {}
-            for model, result, eva_result in zip(st.session_state.selected_model_labels, results, evaluation_result if st.session_state.state["evaluate"] else [None]*len(results)):
+            for model, result in zip(st.session_state.selected_model_labels, results):
                 if isinstance(result, Exception):
                     logger.error(f"Error from {model}: {result}")
-                    assistant_outputs[model] = f"Error: {result}"
+                    assistant_outputs[model] = {"result": f"Error: {result}"}
                 else:
                     assistant_outputs[model] = {"result": result}
-                    if st.session_state.state["evaluate"]:
-                        assistant_outputs[model]["evaluation"] = f" \n\n{st.session_state.agents["evaluator"].format_response(eva_result)}" #
+
             logger.info(assistant_outputs)
             append_message_compare("assistant", assistant_outputs)
-    
+
+            if st.session_state.state["evaluate"]:
+                if not st.session_state.agents["evaluator"]:
+                    st.session_state.agents["evaluator"] = evaluatorAgent(
+                        openai_api_key=config.get("openai_api_key", ""),
+                        anthropic_api_key=config.get("anthropic_api_key", ""),
+                        gemini_api_key=config.get("gemini_api_key", ""),
+                    )
+                st.session_state.state["pending_prompt_for_eval"] = st.session_state.state["pending_input_compare"]
+                st.session_state.state["evaluating"] = True
+
             st.session_state.state.update({
                 "pending_input_compare": None,
                 "waiting_for_user_compare": True,
             })
-            
+
             st.rerun()

@@ -1,8 +1,6 @@
 # filename: utility.py
 import streamlit as st
-import os
-from dotenv import load_dotenv
-from datetime import datetime, timezone, timedelta
+from datetime import timezone, timedelta
 import asyncio
 import logging
 
@@ -26,11 +24,13 @@ def init_session(config: dict):
             "next_agent_research": "research_scope",
             "chat_has_started": False,
             "evaluate": False,
+            "evaluating": False,
+            "pending_prompt_for_eval": None,
         }
 
     if "models" not in st.session_state:
         st.session_state.models = []
-        
+
         for model in config['openai_models']:
             st.session_state.models.append({
                 "label": f"OpenAI | {model}",
@@ -51,23 +51,23 @@ def init_session(config: dict):
                 "provider": "gemini",
                 "model": model,
             })
-            
+
     if "messages_compare" not in st.session_state:
         st.session_state.messages_compare = []
-        
+
     if "messages_research" not in st.session_state:
         st.session_state.messages_research = []
 
     if "selected_model_labels" not in st.session_state:
         st.session_state.selected_model_labels = []
-        
+
     if "agents" not in st.session_state:
         st.session_state.agents = {
             "compare": [],
             "evaluator": None,
             "research_scope": None,
         }
-    
+
     if "config" not in st.session_state:
         st.session_state.config = config
 
@@ -76,43 +76,37 @@ def check_password():
 
     def password_entered():
         """Checks whether a password entered by the user is correct."""
-        if os.getenv("PASSWORD") == st.session_state.get("password"):
+        if st.secrets.get("PASSWORD") == st.session_state.get("password"):
             st.session_state["password_correct"] = True
             del st.session_state["password"]  # Don't store the password.
         else:
             st.session_state["password_correct"] = False
 
-    # Check if the PASSWORD environment variable is set
-    password_env = os.getenv("PASSWORD")
-    if password_env is None or password_env == "":
+    password_env = st.secrets.get("PASSWORD")
+    if not password_env:
         return True  # Skip password check if not set
 
-    # If the password has already been validated, return True
     if st.session_state.get("password_correct", False):
         return True
 
-    # Show input for password
     st.text_input(
         "Password", type="password", on_change=password_entered, key="password"
     )
 
-    # Show error if the password is incorrect
     if "password_correct" in st.session_state and not st.session_state["password_correct"]:
         st.error("😕 Password incorrect")
 
     return False
 
 def load_config():
-    load_dotenv()
-
-    notion_api_key = os.getenv("NOTION_API_KEY")
-    notion_data_source_id = os.getenv("NOTION_DATA_SOURCE_ID")
-    openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
-    anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
-    gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    openai_model = os.getenv("OPENAI_MODELS", "").strip()
-    anthropic_model = os.getenv("ANTHROPIC_MODELS", "gpt-4.1-mini").strip()
-    gemini_model = os.getenv("GEMINI_MODELS", "gpt-4.1-mini").strip()
+    notion_api_key = st.secrets.get("NOTION_API_KEY")
+    notion_data_source_id = st.secrets.get("NOTION_DATA_SOURCE_ID")
+    openai_api_key = st.secrets.get("OPENAI_API_KEY", "").strip()
+    anthropic_api_key = st.secrets.get("ANTHROPIC_API_KEY", "").strip()
+    gemini_api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
+    openai_model = st.secrets.get("OPENAI_MODELS", "").strip()
+    anthropic_model = st.secrets.get("ANTHROPIC_MODELS", "").strip()
+    gemini_model = st.secrets.get("GEMINI_MODELS", "").strip()
 
     return {'openai_api_key': openai_api_key,
             'anthropic_api_key': anthropic_api_key,
@@ -121,7 +115,7 @@ def load_config():
             'anthropic_models': [m.strip() for m in anthropic_model.split(",") if m.strip()],
             'gemini_models': [m.strip() for m in gemini_model.split(",") if m.strip()],
             'notion_api_key': notion_api_key,
-            'notion_data_source_id': notion_data_source_id,            
+            'notion_data_source_id': notion_data_source_id,
             }
 
 def append_message_compare(role, content):
@@ -130,7 +124,7 @@ def append_message_compare(role, content):
         "content": content,
         # "timestamp": datetime.now(SGT).strftime("%Y-%m-%dT%H-%M-%S"),
     })
-    
+
 def append_message_research(role, content):
     st.session_state.messages_research.append({
         "role": role,
@@ -147,7 +141,7 @@ async def run_agents_research(agent, user_message, system_prompts):
     tasks = [agent.response(msg, prompt) for msg, prompt in zip(user_message, system_prompts)]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     return results
-    
+
 def add_download(file_name, content):
     st.session_state.downloads.append({
         "label": file_name+".md",
@@ -156,7 +150,7 @@ def add_download(file_name, content):
         "mime": "text/markdown",
         # "created_at": datetime.now(SGT).strftime("%Y-%m-%dT%H-%M"),
     })
-    
+
 def setup_logging():
     if logging.getLogger().handlers:
         return

@@ -1,19 +1,20 @@
 from anthropic import AsyncAnthropic
 
 class claudeAgent:
-    def __init__(self, api_key: str, model: str ) -> None: 
+    def __init__(self, api_key: str, model: str, max_tokens: int = 4096) -> None:
         self.client = AsyncAnthropic(api_key=api_key)
         self.model = model
+        self.max_tokens = max_tokens
         self.messages = []
 
     async def response(self, user_message: str):
-        
+
         self.messages.append({"role": "user",  "content": user_message})
 
         response = await self.client.messages.create(
             model=self.model,
             messages=self.messages,
-            max_tokens=1024,
+            max_tokens=self.max_tokens,
         )
         
         if response:

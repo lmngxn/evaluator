@@ -1,6 +1,8 @@
 __pycache__
+.vscode
 venv/
 .airbase
 .env*
 .gitlab-ci.yml
 test_notion.py
+.streamlit

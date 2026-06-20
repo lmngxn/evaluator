@@ -14,7 +14,7 @@ The app combines two tools in a single interface:
 - Models are queried **concurrently** (via `asyncio`) and rendered in side-by-side columns.
 - Show/hide individual model outputs after the chat has started.
 - Maintains independent conversation history per model across turns.
-- Optional **evaluation mode**: an evaluator agent scores every response 1–5 on instruction following, correctness, completeness, reasoning quality, practical usefulness, and clarity, with strengths, weaknesses, and an explanation for each.
+- Optional **evaluation mode**: three independent LLM judges (GPT-4o, Claude Sonnet, Gemini 2.5 Pro) each score every response 1–5 on instruction following, correctness, completeness, reasoning quality, practical usefulness, and clarity. Scores are averaged into a consensus result with a per-judge breakdown. Results render first; evaluation runs separately so you're not waiting for both at once.
 
 ### Research Agent
 A pipeline of cooperating agents that route work between each other:
@@ -68,25 +68,42 @@ pip install -r requirements.txt
 
 ### Configuration
 
-Copy `.env.example` to `.env` and fill in your values:
+The app reads secrets from Streamlit's native secrets mechanism — no `.env` file needed.
 
-```bash
-cp .env.example .env
+**Locally:** create `.streamlit/secrets.toml`:
+
+```toml
+OPENAI_API_KEY      = "sk-..."
+ANTHROPIC_API_KEY   = "sk-ant-..."
+GEMINI_API_KEY      = "..."
+
+OPENAI_MODELS    = "gpt-4o, gpt-4o-mini"
+ANTHROPIC_MODELS = "claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5"
+GEMINI_MODELS    = "gemini-2.5-pro, gemini-2.5-flash"
+
+# Optional
+PASSWORD             = ""
+NOTION_API_KEY       = ""
+NOTION_DATA_SOURCE_ID = ""
 ```
 
-| Variable | Description |
+**Streamlit Community Cloud:** paste the same key-value pairs into the **Secrets** panel in your app settings — no code change needed.
+
+> **Important:** add `.streamlit/secrets.toml` to your `.gitignore` so credentials are never committed.
+
+| Key | Description |
 | --- | --- |
-| `PASSWORD` | Optional. If set, gates the app behind a password. Leave blank to disable. |
 | `OPENAI_API_KEY` | OpenAI API key. |
 | `ANTHROPIC_API_KEY` | Anthropic API key. |
 | `GEMINI_API_KEY` | Gemini API key. |
-| `OPENAI_MODELS` | Comma-separated list of OpenAI models to offer. |
-| `GEMINI_MODELS` | Comma-separated list of Gemini models to offer. |
-| `ANTHROPIC_MODELS` | Comma-separated list of Anthropic models to offer. |
-| `NOTION_API_KEY` | Optional. For saving notes to Notion. |
-| `NOTION_DATA_SOURCE_ID` | Optional. Target Notion data source. |
+| `OPENAI_MODELS` | Comma-separated models shown in the model picker. |
+| `ANTHROPIC_MODELS` | Comma-separated models shown in the model picker. |
+| `GEMINI_MODELS` | Comma-separated models shown in the model picker. |
+| `PASSWORD` | Optional. If set, gates the app behind a password prompt. |
+| `NOTION_API_KEY` | Optional. Required for saving research notes to Notion. |
+| `NOTION_DATA_SOURCE_ID` | Optional. Target Notion data source ID. |
 
-The models listed in `*_MODELS` populate the model picker on the Compare Models page.
+The three evaluation judges (GPT-4o, Claude Sonnet, Gemini 2.5 Pro) are fixed and use whichever of the three API keys are present — missing keys are skipped gracefully.
 
 ### Running
 
@@ -101,7 +118,7 @@ Then open the local URL Streamlit prints (typically `http://localhost:8501`).
 **Compare Models**
 1. Pick up to 3 models and optionally toggle evaluation on.
 2. Type a prompt — responses stream into side-by-side columns.
-3. With evaluation on, expand each response's evaluation panel to see rubric scores and comments.
+3. With evaluation on, model responses appear first; a second pass then runs three independent judges (GPT-4o, Claude Sonnet, Gemini 2.5 Pro) and adds consensus scores and a per-judge breakdown to each response.
 4. Use *"Start new chat and choose models again"* to reset and reselect models.
 
 **Research Agent**
@@ -112,4 +129,5 @@ Then open the local URL Streamlit prints (typically `http://localhost:8501`).
 5. Click *"Summarise chat into document"* in the sidebar to condense the conversation into a downloadable Markdown file; if Notion is configured, the document is also saved to your Notion database.
 
 ## Notes
-- Model names in `.env.example` are placeholders — replace them with models available to your API keys.
+- Model names in `OPENAI_MODELS`, `ANTHROPIC_MODELS`, and `GEMINI_MODELS` must match the exact IDs accepted by each provider's API.
+- The evaluation judges are fixed (`gpt-4o`, `claude-sonnet-4-6`, `gemini-2.5-pro`) and independent of the models chosen for comparison.
