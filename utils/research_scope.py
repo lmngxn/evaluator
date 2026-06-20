@@ -12,7 +12,27 @@ When the user's request is complex and require breakdown into multiple search qu
 The search planner will create a structured research plan and different search queries to be performed by specialised agents.
 
 - generic_search
+When the user's request is straightforward and can be answered with a single generic search query.
+
+- profile_researcher
 When the user's request is straightforward and can be answered with a single search query.
+This is to research the profile of an individual.
+
+- organisation_researcher
+When the user's request is straightforward and can be answered with a single search query.
+This is to research thebasic profile and operating model of an organisation.
+
+- news_researcher
+When the user's request is straightforward and can be answered with a single search query.
+This is to research the recent public developments from news outlets, press releases, publications and announcements
+
+- market_researcher
+When the user's request is straightforward and can be answered with a single search query.
+This is to research the market and industry context around a topic or organisation.
+
+- technical_researcher
+When the user's request is straightforward and can be answered with a single search query.
+This is to research the technical and product capabilities of an organisation, product, or vendor.
 
 - self
 When further clarification is required with the user and not routing to any other agents
